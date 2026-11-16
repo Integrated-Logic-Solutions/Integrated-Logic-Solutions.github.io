@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="description" content="Venlux: lighting control for venues, on Crestron processors with Zūm wired and DMX through Pharos.">
+<meta name="robots" content="noindex, nofollow">
 <title>Venlux Lighting Control</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -120,6 +121,8 @@
   .button { justify-self: start; display: inline-block; margin-top: 6px; padding: 13px 20px; border-radius: 10px; background: var(--amber); color: var(--ink); font-weight: 600; text-decoration: none; }
   .button.ghost { background: transparent; color: var(--amber); border: 1px solid var(--amber); }
 
+  /* Preview: shown while the page is shared for feedback; remove with the noindex tag at launch. */
+  .preview { background: var(--amber); color: var(--ink); font: 600 13px/1.4 var(--font-body); text-align: center; padding: 8px max(16px, env(safe-area-inset-right, 0px)) 8px max(16px, env(safe-area-inset-left, 0px)); }
   footer { padding-block: 36px 56px; font-size: 13px; color: var(--muted); display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 
   @media (max-width: 900px) {
@@ -139,6 +142,7 @@
 </head>
 <body>
 
+<div class="preview" role="note">Preview: a work in progress, shared for feedback. Screens are from a made-up demo site.</div>
 <header class="hero">
   <div class="beams" aria-hidden="true"><div class="beam left"></div><div class="beam right"></div></div>
   <div class="wrap bar">
