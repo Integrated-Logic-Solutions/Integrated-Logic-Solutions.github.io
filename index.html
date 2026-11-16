@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Venlux: lighting control for venues, on Crestron processors with Zūm wired and DMX through Pharos.">
+<title>Venlux Lighting Control</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: a venue after dark. One amber light source (the Beam mark) lights the hero; below, two audiences
+     (the venue, the integrator) in their own bands, then what's in the box and one call to action each. */
+  :root {
+    --ink: #0b0e13;          /* brand ink: the room with the lights down */
+    --ink-raised: #12161d;
+    --line: #242a35;
+    --text: #e8eaee;         /* brand light text */
+    --muted: #9aa1ad;
+    --amber: #f2b33d;        /* brand amber: the light */
+    --amber-soft: rgba(242, 179, 61, 0.14);
+    --font-display: "Space Grotesk", "Helvetica Neue", Arial, sans-serif;
+    --font-body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+    --level: 0.55;           /* the hero's light level, set by the scene buttons */
+    --fade: 2s;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ink); color: var(--text); font: 400 17px/1.6 var(--font-body); }
+  .wrap { max-width: 1180px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  h1, h2, h3 { font-family: var(--font-display); font-weight: 600; line-height: 1.08; text-wrap: balance; margin: 0; }
+  p { margin: 0; }
+  a { color: var(--amber); }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--amber); outline-offset: 3px; }
+  .eyebrow { font: 500 12px/1 var(--font-mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--amber); }
+  img { display: block; max-width: 100%; height: auto; }
+
+  /* Top bar */
+  .bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 22px; }
+  .lockup { display: flex; align-items: center; gap: 10px; font: 600 24px/1 var(--font-display); letter-spacing: -0.01em; color: var(--text); text-decoration: none; }
+  .lockup svg { width: 30px; height: 30px; }
+  .lockup b { color: var(--amber); font-weight: 600; }
+  .bar nav { display: flex; gap: 22px; font-size: 14px; flex-wrap: wrap; justify-content: flex-end; }
+  .bar nav a { color: var(--muted); text-decoration: none; }
+  .bar nav a:hover { color: var(--text); }
+
+  /* Hero: the beams' brightness follows --level, with the scene's fade time */
+  .hero { position: relative; overflow: hidden; border-bottom: 1px solid var(--line); }
+  .beams { position: absolute; inset: 0; pointer-events: none; opacity: calc(0.15 + var(--level) * 0.85); transition: opacity var(--fade) ease; }
+  .beam { position: absolute; top: -10%; width: 70%; height: 125%; filter: blur(22px); }
+  .beam.left { left: 22%; background: linear-gradient(200deg, rgba(242, 179, 61, 0.55), rgba(242, 179, 61, 0) 70%); clip-path: polygon(0 0, 28% 0, 100% 100%, 82% 100%); }
+  .beam.right { right: -6%; background: linear-gradient(160deg, rgba(242, 179, 61, 0.45), rgba(242, 179, 61, 0) 70%); clip-path: polygon(72% 0, 100% 0, 18% 100%, 0 100%); }
+  .hero .wrap { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 56px; align-items: center; padding-block: 56px 72px; }
+  .hero h1 { font-size: clamp(40px, 5.6vw, 72px); letter-spacing: -0.025em; }
+  .hero h1 em { font-style: normal; color: var(--amber); }
+  .lede { margin-top: 22px; font-size: 19px; color: var(--muted); max-width: 34em; }
+  .scenes { margin-top: 32px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .scenes button { font: 500 15px/1 var(--font-body); color: var(--text); background: var(--ink-raised); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; cursor: pointer; }
+  .scenes button[aria-pressed="true"] { border-color: var(--amber); color: var(--amber); background: var(--amber-soft); }
+  .readout { margin-top: 12px; font: 400 13px/1.4 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+  .panel { background: #050608; border: 1px solid var(--line); border-radius: 22px; padding: 14px; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55); }
+  .panel img { border-radius: 10px; }
+  .panel-caption { margin-top: 10px; font: 400 12px/1.4 var(--font-mono); color: var(--muted); text-align: center; }
+
+  /* Spec strip: what it runs on */
+  .specs { border-bottom: 1px solid var(--line); }
+  .specs ul { list-style: none; margin: 0; display: flex; flex-wrap: wrap; gap: 10px 28px; padding-block: 20px; font: 400 13px/1.4 var(--font-mono); color: var(--muted); }
+  .specs li::before { content: "▸ "; color: var(--amber); }
+
+  /* Audience sections */
+  section { padding-block: 88px; border-bottom: 1px solid var(--line); }
+  .head { display: grid; gap: 16px; max-width: 46em; margin-bottom: 48px; }
+  .head h2 { font-size: clamp(32px, 4vw, 48px); letter-spacing: -0.02em; }
+  .head p { color: var(--muted); font-size: 18px; }
+
+  .shots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px; }
+  .shot { display: grid; gap: 14px; align-content: start; }
+  .shot img { border-radius: 12px; border: 1px solid var(--line); }
+  .shot h3 { font-size: 20px; }
+  .shot p { color: var(--muted); font-size: 15.5px; }
+
+  .points { margin-top: 56px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px 40px; }
+  .points div { display: grid; gap: 6px; align-content: start; border-top: 1px solid var(--line); padding-top: 16px; }
+  .points h3 { font-size: 17px; }
+  .points p { color: var(--muted); font-size: 15px; }
+
+  /* Integrator workflow: a real sequence, so it is numbered */
+  .steps { display: grid; gap: 64px; }
+  .step { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: 48px; align-items: center; }
+  .step:nth-child(even) .step-text { order: 2; }
+  .step-text { display: grid; gap: 12px; }
+  .step-num { font: 500 13px/1 var(--font-mono); color: var(--amber); letter-spacing: 0.1em; }
+  .step h3 { font-size: 28px; letter-spacing: -0.01em; }
+  .step p { color: var(--muted); }
+  .step ul { margin: 4px 0 0; padding-left: 18px; color: var(--muted); font-size: 15.5px; display: grid; gap: 4px; }
+  .step img { border-radius: 12px; border: 1px solid var(--line); }
+
+  /* Architecture */
+  .arch { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 56px; align-items: center; }
+  .arch-figure { overflow-x: auto; }
+  .arch svg { width: 100%; min-width: 460px; height: auto; display: block; }
+  .arch svg text { font-family: var(--font-mono); fill: var(--muted); font-size: 12px; }
+  .arch svg .t-strong { fill: var(--text); font-family: var(--font-display); font-size: 15px; font-weight: 600; }
+  .arch ul { margin: 18px 0 0; padding-left: 18px; color: var(--muted); display: grid; gap: 8px; }
+
+  /* What's in the box */
+  .box { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  .box div { background: var(--ink-raised); padding: 24px; display: grid; gap: 8px; align-content: start; }
+  .box h3 { font-size: 17px; }
+  .box p { color: var(--muted); font-size: 14.5px; }
+
+  /* Calls to action */
+  .cta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+  .cta div { border: 1px solid var(--line); border-radius: 16px; padding: 36px; display: grid; gap: 14px; align-content: start; }
+  .cta div.lit { border-color: var(--amber); background: linear-gradient(160deg, var(--amber-soft), transparent 60%); }
+  .cta h2 { font-size: 30px; }
+  .cta p { color: var(--muted); }
+  .button { justify-self: start; display: inline-block; margin-top: 6px; padding: 13px 20px; border-radius: 10px; background: var(--amber); color: var(--ink); font-weight: 600; text-decoration: none; }
+  .button.ghost { background: transparent; color: var(--amber); border: 1px solid var(--amber); }
+
+  footer { padding-block: 36px 56px; font-size: 13px; color: var(--muted); display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+
+  @media (max-width: 900px) {
+    .hero .wrap, .step, .arch, .cta { grid-template-columns: minmax(0, 1fr); gap: 36px; }
+    .step:nth-child(even) .step-text { order: 0; }
+    .shots, .points { grid-template-columns: minmax(0, 1fr); }
+    .box { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    section { padding-block: 64px; }
+  }
+  @media (max-width: 520px) {
+    .box { grid-template-columns: minmax(0, 1fr); }
+    .bar nav { display: none; }
+    .cta div { padding: 24px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .beams { transition: none; } }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="beams" aria-hidden="true"><div class="beam left"></div><div class="beam right"></div></div>
+  <div class="wrap bar">
+    <a class="lockup" href="#top" id="top" aria-label="Venlux">
+      <svg viewBox="0 0 120 120" aria-hidden="true"><polygon fill="#f2b33d" points="60,100 16,24 36,18"/><polygon fill="#f2b33d" points="60,100 84,18 104,24"/><circle fill="#f2b33d" cx="60" cy="102" r="7"/></svg>
+      <span>ven<b>lux</b></span>
+    </a>
+    <nav aria-label="Sections">
+      <a href="#venue">For venues</a>
+      <a href="#integrators">For integrators</a>
+      <a href="#features">Features</a>
+    </nav>
+  </div>
+  <div class="wrap">
+    <div>
+      <div class="eyebrow">Lighting control for venues</div>
+      <h1 style="margin-top:18px">Every room in the building, <em>one tap away.</em></h1>
+      <p class="lede">Venlux runs the lighting of a whole venue, from ballrooms and concourses to the façade, on Crestron processors. Staff get simple room panels. You get one master for the entire site.</p>
+      <div class="scenes" role="group" aria-label="Try a scene">
+        <button type="button" data-level="0.8" data-fade="1.5" data-name="Welcome">Welcome</button>
+        <button type="button" data-level="0.55" data-fade="2" data-name="Dinner" aria-pressed="true">Dinner</button>
+        <button type="button" data-level="0.3" data-fade="3" data-name="Presentation">Presentation</button>
+        <button type="button" data-level="0" data-fade="4" data-name="Off">Off</button>
+      </div>
+      <p class="readout" id="readout" aria-live="polite">Scene: Dinner · 55% · fade 2.0 s</p>
+    </div>
+    <figure style="margin:0">
+      <div class="panel"><img src="img/22-room-screen.jpg" alt="A Venlux room panel: the room's scenes as large buttons, a brightness slider and divide/combine" width="1330" height="823"></div>
+      <figcaption class="panel-caption">A room panel, 7" touch screen · demo site</figcaption>
+    </figure>
+  </div>
+</header>
+
+<div class="specs">
+  <div class="wrap">
+    <ul aria-label="What Venlux runs on">
+      <li>Crestron 4-Series processors</li>
+      <li>Zūm wired dimming and switching</li>
+      <li>DMX color and tunable white through Pharos</li>
+      <li>Touch panels, WebXPanel and the Crestron One app</li>
+      <li>One processor per floor, linked</li>
+    </ul>
+  </div>
+</div>
+
+<main>
+  <section id="venue">
+    <div class="wrap">
+      <div class="head">
+        <div class="eyebrow">For the venue</div>
+        <h2>It just works, in every room.</h2>
+        <p>Your staff walk up to a panel with your logo on it, tap the scene they want, and the room changes. Nobody needs a manual.</p>
+      </div>
+      <div class="shots">
+        <figure class="shot" style="margin:0">
+          <img src="img/21-room-splash.jpg" alt="Room panel at rest: the venue's logo, the time and the room name" width="1330" height="823" loading="lazy">
+          <h3>Your brand, not ours</h3>
+          <p>Panels rest on your logo, colors and the time. The words can match your venue too: call rooms "suites" if that is what you call them.</p>
+        </figure>
+        <figure class="shot" style="margin:0">
+          <img src="img/22-room-screen.jpg" alt="Room panel with scene buttons and brightness" width="1330" height="823" loading="lazy">
+          <h3>Scenes, not switches</h3>
+          <p>Welcome, Dinner, Presentation, Dance. One tap sets every light in the room, and one slider makes the whole scene brighter or dimmer.</p>
+        </figure>
+        <figure class="shot" style="margin:0">
+          <img src="img/23-room-combine.jpg" alt="Room panel dividing or combining ballrooms" width="1330" height="823" loading="lazy">
+          <h3>Rooms that divide</h3>
+          <p>Open the airwall and the ballrooms act as one: one scene, one slider, on every panel in the space.</p>
+        </figure>
+      </div>
+      <div class="points">
+        <div><h3>On a schedule</h3><p>Lights follow the clock, sunrise and sunset, event days and holidays, so the building is ready before anyone arrives.</p></div>
+        <div><h3>One master for the site</h3><p>From the master on an iPad or a browser, see every area, run site-wide scenes and spot a problem before a guest does.</p></div>
+        <div><h3>Keeps running</h3><p>Each floor's processor runs its own rooms. If it loses touch with the rest of the building, its panels and keypads carry on.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="integrators">
+    <div class="wrap">
+      <div class="head">
+        <div class="eyebrow">For the integrator</div>
+        <h2>Deliver it faster. Leave it tidier.</h2>
+        <p>Venlux turns the lighting schedule you already have into a working system, with every step from drawings to commissioning on one path.</p>
+      </div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-text">
+            <div class="step-num">STEP 1 · IN THE OFFICE</div>
+            <h3>Describe the site in Venlux Setup</h3>
+            <p>One workbook holds the site: areas, rooms, zones, devices and processors. Venlux Setup fills it in with you and checks it as you go.</p>
+            <ul>
+              <li>Bulk entry for rooms that repeat</li>
+              <li>Filters for one area, or zones with no device yet</li>
+              <li>Still opens in Excel</li>
+            </ul>
+          </div>
+          <img src="img/vs-02-zones.jpg" alt="Venlux Setup's Zones sheet" width="1400" height="868" loading="lazy">
+        </div>
+        <div class="step">
+          <div class="step-text">
+            <div class="step-num">STEP 2 · ONE BUTTON</div>
+            <h3>Deploy to the processors</h3>
+            <p>Venlux Setup sends each processor its site and restarts the program. The login is asked for each time, never saved.</p>
+            <ul>
+              <li>Every IP device gets its IPID</li>
+              <li>One panel file for every site</li>
+              <li>The previous version is kept</li>
+            </ul>
+          </div>
+          <img src="img/vs-07-deploy.jpg" alt="Venlux Setup's deployment screen" width="1400" height="868" loading="lazy">
+        </div>
+        <div class="step">
+          <div class="step-text">
+            <div class="step-num">STEP 3 · ON SITE</div>
+            <h3>Find the devices and match them</h3>
+            <p>The master scans the network and matches what it finds to the plan. You see which zones are online and which aren't.</p>
+            <ul>
+              <li>Cresnet IDs and IPIDs laid out per bridge</li>
+              <li>A guided flow for replacing a failed device</li>
+              <li>Keypad drawings and engraving sheets</li>
+            </ul>
+          </div>
+          <img src="img/16-devices-scan.jpg" alt="The master's device scan, matched to the plan" width="1456" height="819" loading="lazy">
+        </div>
+        <div class="step">
+          <div class="step-text">
+            <div class="step-num">STEP 4 · HAND OVER</div>
+            <h3>Commission and walk away</h3>
+            <p>A checklist confirms the site is ready, then a commissioning snapshot records how you left it. Daily copies are kept on every processor.</p>
+            <ul>
+              <li>Users with their own logins and access levels</li>
+              <li>An activity log of who changed what</li>
+              <li>Restore in one step if something goes wrong</li>
+            </ul>
+          </div>
+          <img src="img/20-system.jpg" alt="The master's system page" width="1568" height="704" loading="lazy">
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="how">
+    <div class="wrap arch">
+      <div>
+        <div class="eyebrow">How it's built</div>
+        <h2 style="font-size:clamp(28px,3.4vw,40px);margin-top:14px">A processor per floor, one site.</h2>
+        <ul>
+          <li>The primary holds the shared site: scenes, schedules, users.</li>
+          <li>Every processor drives its own floor's Zūm devices and Pharos controllers.</li>
+          <li>A panel on one floor can run rooms on another: commands travel through the primary.</li>
+          <li>If a link drops, each floor keeps running its own rooms.</li>
+        </ul>
+      </div>
+      <figure class="arch-figure" style="margin:0" aria-label="Diagram: a primary processor linked to two floor processors, each with its own panels and lighting">
+        <svg viewBox="0 0 520 300" role="img" aria-hidden="true">
+          <rect x="185" y="20" width="150" height="60" rx="10" fill="#12161d" stroke="#f2b33d"/>
+          <text x="260" y="46" text-anchor="middle" class="t-strong">Primary</text>
+          <text x="260" y="66" text-anchor="middle">site state · master</text>
+          <line x1="230" y1="80" x2="110" y2="140" stroke="#f2b33d" stroke-width="1.5"/>
+          <line x1="290" y1="80" x2="410" y2="140" stroke="#f2b33d" stroke-width="1.5"/>
+          <rect x="30" y="140" width="160" height="56" rx="10" fill="#12161d" stroke="#242a35"/>
+          <text x="110" y="164" text-anchor="middle" class="t-strong">Floor 1</text>
+          <text x="110" y="184" text-anchor="middle">processor</text>
+          <rect x="330" y="140" width="160" height="56" rx="10" fill="#12161d" stroke="#242a35"/>
+          <text x="410" y="164" text-anchor="middle" class="t-strong">Floor 2</text>
+          <text x="410" y="184" text-anchor="middle">processor</text>
+          <line x1="80" y1="196" x2="70" y2="236" stroke="#242a35"/>
+          <line x1="140" y1="196" x2="150" y2="236" stroke="#242a35"/>
+          <line x1="380" y1="196" x2="370" y2="236" stroke="#242a35"/>
+          <line x1="440" y1="196" x2="450" y2="236" stroke="#242a35"/>
+          <text x="70" y="256" text-anchor="middle">room panels</text>
+          <text x="150" y="256" text-anchor="middle">Zūm · DMX</text>
+          <text x="370" y="256" text-anchor="middle">room panels</text>
+          <text x="450" y="256" text-anchor="middle">Zūm · DMX</text>
+          <text x="260" y="288" text-anchor="middle">each floor keeps its own rooms running</text>
+        </svg>
+      </figure>
+    </div>
+  </section>
+
+  <section id="features">
+    <div class="wrap">
+      <div class="head">
+        <div class="eyebrow">What's in the box</div>
+        <h2>Everything a venue's lighting needs.</h2>
+      </div>
+      <div class="box">
+        <div><h3>Zones and scenes</h3><p>Hundreds of zones grouped into areas and rooms, with room scenes, area presets and site-wide scenes.</p></div>
+        <div><h3>Color and white</h3><p>DMX fixtures through Pharos controllers: full color, color plus white and tunable white.</p></div>
+        <div><h3>Occupancy</h3><p>Sensors and timeouts per room, run by the Zūm devices themselves or by Venlux.</p></div>
+        <div><h3>Keypads</h3><p>Zūm and Cresnet keypads with drawn layouts, button actions and lit buttons.</p></div>
+        <div><h3>Schedules</h3><p>By time, sunrise or sunset, with event days and holidays on a site calendar.</p></div>
+        <div><h3>Users and access</h3><p>Administrator, technician and user levels, PINs on touch panels, an activity log.</p></div>
+        <div><h3>Integrations</h3><p>Other control systems can recall scenes and read status, with their own scoped keys.</p></div>
+        <div><h3>Backups</h3><p>Daily copies on every processor and a commissioning snapshot that never rotates out.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="contact" style="border-bottom:0">
+    <div class="wrap cta">
+      <div class="lit">
+        <div class="eyebrow">Venue owners and operators</div>
+        <h2>Ask your integrator about Venlux.</h2>
+        <p>Venlux is installed and supported by lighting and AV integrators who know your building.</p>
+      </div>
+      <div>
+        <div class="eyebrow">Integrators</div>
+        <h2>See the screens you'd use on a job.</h2>
+        <p>Every screen from the office to handover, from a demo site, in the installer guide.</p>
+        <a class="button ghost" href="https://integrated-logic-solutions.github.io/venlux-guide/">Open the installer guide</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="wrap">
+  <span>Venlux · Integrated Logic Solutions</span>
+  <span>Screens are from a made-up demo site. Crestron, Zūm and Pharos are trademarks of their owners.</span>
+</footer>
+
+<script>
+  const root = document.documentElement;
+  const readout = document.getElementById('readout');
+  for (const button of document.querySelectorAll('.scenes button')) {
+    button.addEventListener('click', () => {
+      for (const other of document.querySelectorAll('.scenes button')) other.setAttribute('aria-pressed', String(other === button));
+      const level = Number(button.dataset.level);
+      const fade = Number(button.dataset.fade);
+      root.style.setProperty('--fade', fade + 's');
+      root.style.setProperty('--level', String(level));
+      readout.textContent = 'Scene: ' + button.dataset.name + ' · ' + Math.round(level * 100) + '% · fade ' + fade.toFixed(1) + ' s';
+    });
+  }
+</script>
+
+</body>
+</html>
